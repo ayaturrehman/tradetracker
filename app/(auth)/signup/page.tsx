@@ -1,11 +1,37 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 
 import { getPlanBySlug } from "@/config/plans";
+
+const fallbackTimezones = [
+  "UTC",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Zurich",
+  "Europe/Athens",
+  "Africa/Johannesburg",
+  "Asia/Dubai",
+  "Asia/Karachi",
+  "Asia/Kolkata",
+  "Asia/Bangkok",
+  "Asia/Kuala_Lumpur",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+  "America/St_Johns",
+  "America/Caracas",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+];
 
 export default function SignupPage() {
   const router = useRouter();
@@ -14,6 +40,31 @@ export default function SignupPage() {
   const plan = getPlanBySlug(selectedPlanSlug) ?? getPlanBySlug("starter");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const timezoneOptions = useMemo(() => {
+    if (typeof Intl !== "undefined" && "supportedValuesOf" in Intl) {
+      try {
+        // @ts-expect-error - supportedValuesOf is available in modern runtimes
+        return (Intl.supportedValuesOf("timeZone") as string[]).sort((a, b) =>
+          a.localeCompare(b),
+        );
+      } catch (error) {
+        return fallbackTimezones;
+      }
+    }
+    return fallbackTimezones;
+  }, []);
+
+  const defaultTimezone = useMemo(() => {
+    if (typeof Intl !== "undefined") {
+      try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+      } catch (error) {
+        return "UTC";
+      }
+    }
+    return "UTC";
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -113,12 +164,13 @@ export default function SignupPage() {
           <select
             name="timezone"
             className="mt-1 w-full rounded-xl border border-foreground/20 bg-transparent px-3 py-2 text-sm focus:border-foreground focus:outline-none"
-            defaultValue="UTC"
+            defaultValue={defaultTimezone}
           >
-            <option value="UTC">UTC</option>
-            <option value="America/New_York">New York (ET)</option>
-            <option value="Europe/London">London (GMT)</option>
-            <option value="Asia/Singapore">Singapore (SGT)</option>
+            {timezoneOptions.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
           </select>
         </label>
 

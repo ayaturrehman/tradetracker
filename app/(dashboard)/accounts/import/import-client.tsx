@@ -3,6 +3,8 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { cn } from "@/lib/utils";
+
 type AccountOption = {
   id: string;
   name: string;
@@ -84,7 +86,6 @@ export function ImportCsvClient({ accounts }: ImportCsvClientProps) {
           csv: csvText,
           delimiter,
           decimalSeparator,
-          previewLimit: 50,
           accountId: selectedAccountId,
         }),
       });
@@ -116,7 +117,13 @@ export function ImportCsvClient({ accounts }: ImportCsvClientProps) {
     return previewResult.data.filter((trade) => trade.alreadyExists).length;
   }, [previewResult]);
 
-  const formatJSON = (value: unknown) => JSON.stringify(value, null, 2);
+const formatJsonDate = (value: string) => {
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+};
 
   const handleQueueImport = useCallback(async () => {
     if (!previewResult) {
@@ -380,15 +387,66 @@ export function ImportCsvClient({ accounts }: ImportCsvClientProps) {
             <div className="space-y-3 rounded-2xl border border-foreground/10 bg-background p-5 shadow-sm shadow-foreground/5">
               <h3 className="text-lg font-semibold">Preview trades</h3>
               <p className="text-xs text-foreground/60">
-                First {previewResult.data.length} rows normalized by the parser.
+                Showing all {previewResult.data.length} normalized rows. Scroll to review before
+                queuing the import.
               </p>
-              <pre className="overflow-x-auto rounded-xl bg-foreground/5 p-4 text-xs">
-                {formatJSON(previewResult.data)}
-              </pre>
-              <div className="flex flex-wrap items-center gap-3 border-t border-foreground/10 pt-4">
-                <span className="text-xs text-foreground/60">
-                  Review the normalized payload above before final ingestion.
-                </span>
+              <div className="max-h-[420px] overflow-auto rounded-xl border border-foreground/10">
+                <table className="min-w-full table-fixed border-collapse text-xs">
+                  <thead className="bg-foreground/5 text-foreground/70">
+                    <tr>
+                      <th className="sticky top-0 px-3 py-2 text-left">Symbol</th>
+                      <th className="sticky top-0 px-3 py-2 text-left">Side</th>
+                      <th className="sticky top-0 px-3 py-2 text-right">Qty</th>
+                      <th className="sticky top-0 px-3 py-2 text-right">Entry</th>
+                      <th className="sticky top-0 px-3 py-2 text-right">Exit</th>
+                      <th className="sticky top-0 px-3 py-2 text-right">P&amp;L</th>
+                      <th className="sticky top-0 px-3 py-2 text-left">Opened</th>
+                      <th className="sticky top-0 px-3 py-2 text-left">Closed</th>
+                      <th className="sticky top-0 px-3 py-2 text-left">External ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewResult.data.map((trade, index) => (
+                      <tr
+                        key={`${trade.externalId ?? "row"}-${index}`}
+                        className="border-t border-foreground/10 text-foreground"
+                      >
+                        <td className="px-3 py-2 font-semibold">{trade.symbol ?? trade.raw.symbol ?? "—"}</td>
+                        <td className="px-3 py-2 uppercase text-foreground/60">{trade.side}</td>
+                        <td className="px-3 py-2 text-right text-foreground/60">
+                          {trade.quantity ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-foreground/60">
+                          {trade.entryPrice ?? trade.raw.entryPrice ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-foreground/60">
+                          {trade.exitPrice ?? trade.raw.exitPrice ?? "—"}
+                        </td>
+                        <td
+                          className={cn(
+                            "px-3 py-2 text-right font-semibold",
+                            trade.profitLoss && trade.profitLoss > 0
+                              ? "text-emerald-500"
+                              : trade.profitLoss && trade.profitLoss < 0
+                                ? "text-rose-500"
+                                : "text-foreground/60",
+                          )}
+                        >
+                          {trade.profitLoss ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-foreground/60">
+                          {trade.openedAt ? formatJsonDate(trade.openedAt) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-foreground/60">
+                          {trade.closedAt ? formatJsonDate(trade.closedAt) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-foreground/60">
+                          {trade.externalId ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           ) : null}
@@ -397,10 +455,10 @@ export function ImportCsvClient({ accounts }: ImportCsvClientProps) {
 
       <section className="rounded-2xl border border-dashed border-foreground/20 bg-background/60 p-6 text-sm text-foreground/60">
         <p>
-          After reviewing the preview, upload the file to storage and call{" "}
-          <code className="rounded bg-foreground/10 px-1">POST /api/imports</code> with the
-          storage key, <code className="rounded bg-foreground/10 px-1">tradingAccountId</code>, and metadata. A background worker should ingest
-          the parsed trades and update the sync log status.
+          After reviewing the preview, click <strong>Queue import job</strong> to push the full
+          dataset via <code className="rounded bg-foreground/10 px-1">POST /api/imports/process</code>.
+          Prefer an async workflow? Upload the CSV to storage and call{" "}
+          <code className="rounded bg-foreground/10 px-1">POST /api/imports</code> from a background worker.
         </p>
       </section>
     </div>

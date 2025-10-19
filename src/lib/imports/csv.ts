@@ -67,6 +67,8 @@ const HEADER_ALIAS_MAP: Record<string, NormalizedKey> = {
 
   "entry time": "openedAtTime",
   "open time": "openedAtTime",
+  "trade time": "openedAtTime",
+  time: "openedAtTime",
   "open datetime": "openedAt",
   "execution time": "openedAt",
   date: "openedAtDate",
@@ -74,14 +76,30 @@ const HEADER_ALIAS_MAP: Record<string, NormalizedKey> = {
   "entry date": "openedAtDate",
   "open date": "openedAtDate",
   "entry timestamp": "openedAt",
+  "entry day": "openedAtDay",
+  "open day": "openedAtDay",
+  day: "openedAtDay",
+  "entry month": "openedAtMonth",
+  "open month": "openedAtMonth",
+  month: "openedAtMonth",
+  "entry year": "openedAtYear",
+  "open year": "openedAtYear",
+  year: "openedAtYear",
 
   "exit time": "closedAtTime",
   "close time": "closedAtTime",
+  "trade exit time": "closedAtTime",
   "close datetime": "closedAt",
   "exit datetime": "closedAt",
   "exit date": "closedAtDate",
   "close date": "closedAtDate",
   "close timestamp": "closedAt",
+  "exit day": "closedAtDay",
+  "close day": "closedAtDay",
+  "exit month": "closedAtMonth",
+  "close month": "closedAtMonth",
+  "exit year": "closedAtYear",
+  "close year": "closedAtYear",
 
   comment: "notes",
   note: "notes",
@@ -167,9 +185,15 @@ type NormalizedKey =
   | "openedAt"
   | "openedAtTime"
   | "openedAtDate"
+  | "openedAtDay"
+  | "openedAtMonth"
+  | "openedAtYear"
   | "closedAt"
   | "closedAtTime"
   | "closedAtDate"
+  | "closedAtDay"
+  | "closedAtMonth"
+  | "closedAtYear"
   | "notes"
   | "strategyTag"
   | "externalId";
@@ -206,6 +230,32 @@ const toDate = (value: string | null | undefined) => {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
 
+  const dayFirstMatch = trimmed.match(
+    /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\s+(\d{1,2}:\d{2}(?::\d{2})?))?$/,
+  );
+  if (dayFirstMatch) {
+    const [, dayRaw, monthRaw, yearRaw, timeRaw] = dayFirstMatch;
+    let dayNum = Number.parseInt(dayRaw, 10);
+    let monthNum = Number.parseInt(monthRaw, 10);
+    let yearNum = Number.parseInt(yearRaw, 10);
+    if (Number.isNaN(dayNum) || Number.isNaN(monthNum) || Number.isNaN(yearNum)) {
+      return undefined;
+    }
+    if (yearNum < 100) {
+      yearNum += yearNum >= 70 ? 1900 : 2000;
+    }
+    const yearStr = yearNum.toString().padStart(4, "0");
+    const monthStr = monthNum.toString().padStart(2, "0");
+    const dayStr = dayNum.toString().padStart(2, "0");
+    const timeSegment = timeRaw ? `${timeRaw.length === 5 ? `${timeRaw}:00` : timeRaw}` : "00:00:00";
+    const isoString = `${yearStr}-${monthStr}-${dayStr}T${timeSegment}Z`;
+    const parsed = new Date(isoString);
+    if (Number.isNaN(parsed.getTime())) {
+      return undefined;
+    }
+    return parsed;
+  }
+
   const directDate = new Date(trimmed);
   if (Number.isFinite(directDate.getTime())) {
     return directDate;
@@ -231,6 +281,75 @@ const combineDateParts = (
 
   const combined = [datePart ?? "", timePart ?? ""].join(" ").trim();
   return toDate(combined || datePart || timePart);
+};
+
+const MONTH_LOOKUP: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+const normalizeMonthValue = (value?: string) => {
+  if (!value) return null;
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return null;
+  if (MONTH_LOOKUP[trimmed]) {
+    return MONTH_LOOKUP[trimmed];
+  }
+  const numeric = Number.parseInt(trimmed, 10);
+  if (Number.isNaN(numeric)) {
+    return null;
+  }
+  if (numeric >= 1 && numeric <= 12) {
+    return numeric;
+  }
+  return null;
+};
+
+const composeDateString = (year?: string, month?: string, day?: string) => {
+  if (!year || !month || !day) return undefined;
+  const yearTrimmed = year.trim();
+  const dayTrimmed = day.trim();
+  if (!yearTrimmed || !dayTrimmed) return undefined;
+
+  let yearNum = Number.parseInt(yearTrimmed, 10);
+  if (Number.isNaN(yearNum)) return undefined;
+  if (yearNum < 100) {
+    yearNum += yearNum >= 70 ? 1900 : 2000;
+  }
+
+  const monthNum = normalizeMonthValue(month);
+  if (monthNum === null) return undefined;
+
+  const dayNum = Number.parseInt(dayTrimmed, 10);
+  if (Number.isNaN(dayNum)) return undefined;
+
+  const yearStr = yearNum.toString().padStart(4, "0");
+  const monthStr = monthNum.toString().padStart(2, "0");
+  const dayStr = dayNum.toString().padStart(2, "0");
+
+  return `${yearStr}-${monthStr}-${dayStr}`;
 };
 
 export function parseTradeCsv(
@@ -269,8 +388,14 @@ export function parseTradeCsv(
     const working: Partial<NormalizedTrade> & {
       openedAtDate?: string;
       openedAtTime?: string;
+      openedAtDay?: string;
+      openedAtMonth?: string;
+      openedAtYear?: string;
       closedAtDate?: string;
       closedAtTime?: string;
+      closedAtDay?: string;
+      closedAtMonth?: string;
+      closedAtYear?: string;
     } = { raw: row };
 
     for (const [header, value] of Object.entries(row)) {
@@ -311,8 +436,23 @@ export function parseTradeCsv(
         case "openedAtTime":
           working.openedAtTime ??= value;
           break;
-        case "openedAtDate":
-          working.openedAtDate ??= value;
+        case "openedAtDate": {
+          const trimmed = value?.trim();
+          if (trimmed && /^\d{1,2}$/.test(trimmed)) {
+            working.openedAtDay ??= trimmed;
+          } else {
+            working.openedAtDate ??= value;
+          }
+          break;
+        }
+        case "openedAtDay":
+          working.openedAtDay ??= value?.trim();
+          break;
+        case "openedAtMonth":
+          working.openedAtMonth ??= value?.trim();
+          break;
+        case "openedAtYear":
+          working.openedAtYear ??= value?.trim();
           break;
         case "closedAt":
           working.closedAt ??= toDate(value);
@@ -320,8 +460,23 @@ export function parseTradeCsv(
         case "closedAtTime":
           working.closedAtTime ??= value;
           break;
-        case "closedAtDate":
-          working.closedAtDate ??= value;
+        case "closedAtDate": {
+          const trimmed = value?.trim();
+          if (trimmed && /^\d{1,2}$/.test(trimmed)) {
+            working.closedAtDay ??= trimmed;
+          } else {
+            working.closedAtDate ??= value;
+          }
+          break;
+        }
+        case "closedAtDay":
+          working.closedAtDay ??= value?.trim();
+          break;
+        case "closedAtMonth":
+          working.closedAtMonth ??= value?.trim();
+          break;
+        case "closedAtYear":
+          working.closedAtYear ??= value?.trim();
           break;
         case "notes":
           working.notes ??= value;
@@ -337,16 +492,15 @@ export function parseTradeCsv(
       }
     }
 
-    const openedAt = combineDateParts(
-      working.openedAt,
-      working.openedAtDate,
-      working.openedAtTime,
-    );
-    const closedAt = combineDateParts(
-      working.closedAt,
-      working.closedAtDate,
-      working.closedAtTime,
-    );
+    const openedDateString =
+      working.openedAtDate ??
+      composeDateString(working.openedAtYear, working.openedAtMonth, working.openedAtDay);
+    const closedDateString =
+      working.closedAtDate ??
+      composeDateString(working.closedAtYear, working.closedAtMonth, working.closedAtDay);
+
+    const openedAt = combineDateParts(working.openedAt, openedDateString, working.openedAtTime);
+    const closedAt = combineDateParts(working.closedAt, closedDateString, working.closedAtTime);
 
     if (!working.symbol || !working.side) {
       skipped.push({
@@ -357,9 +511,11 @@ export function parseTradeCsv(
     }
 
     if (!openedAt) {
-      warnings.push(
-        `Row ${index + 1}: Unable to determine entry/open time. Trade imported without openedAt.`,
-      );
+      skipped.push({
+        row: index + 1,
+        reason: "Unable to parse openedAt date/time. Row skipped.",
+      });
+      return;
     }
 
     const openedAtIso = openedAt ? openedAt.toISOString() : "";
@@ -387,7 +543,7 @@ export function parseTradeCsv(
       takeProfit: working.takeProfit,
       fees: working.fees,
       profitLoss: working.profitLoss,
-      openedAt: openedAt ?? new Date(),
+      openedAt,
       closedAt: closedAt,
       notes: working.notes,
       strategyTag: working.strategyTag,

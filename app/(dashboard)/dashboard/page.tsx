@@ -1,16 +1,11 @@
-import { Fragment } from "react";
 import { Metadata } from "next";
 import Link from "next/link";
 import { format } from "date-fns";
 import { redirect } from "next/navigation";
 
 import { AccountSwitcher } from "./account-switcher";
-import {
-  buildMonthCalendar,
-  getAdjacentMonths,
-  parseMonthParam,
-} from "@/lib/analytics/calendar";
 import { CalendarGrid } from "./calendar-grid";
+import { buildMonthCalendar, parseMonthParam } from "@/lib/analytics/calendar";
 import { calculateOverviewMetrics } from "@/lib/analytics/metrics";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
@@ -63,8 +58,32 @@ export default async function DashboardOverviewPage({
       : null;
 
   const monthParam = typeof searchParams?.month === "string" ? searchParams.month : null;
-  const monthDate = parseMonthParam(monthParam) ?? new Date();
-  const monthStartLabel = format(monthDate, "MMMM yyyy");
+  const monthDate =
+    parseMonthParam(monthParam) ??
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+
+  const currentYear = monthDate.getFullYear();
+  const currentMonthIndex = monthDate.getMonth();
+
+  const prevYear = currentMonthIndex === 0 ? currentYear - 1 : currentYear;
+  const prevMonthIndex = currentMonthIndex === 0 ? 11 : currentMonthIndex - 1;
+  const nextYear = currentMonthIndex === 11 ? currentYear + 1 : currentYear;
+  const nextMonthIndex = currentMonthIndex === 11 ? 0 : currentMonthIndex + 1;
+
+  const previousMonthParam = `${prevYear}-${String(prevMonthIndex + 1).padStart(2, "0")}`;
+  const nextMonthParam = `${nextYear}-${String(nextMonthIndex + 1).padStart(2, "0")}`;
+  const monthLabelFullFormatter = new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+  const monthLabelShortFormatter = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    year: "numeric",
+  });
+
+  const displayedMonthDate = new Date(currentYear, currentMonthIndex, 1);
+
+  const monthStartLabel = monthLabelFullFormatter.format(displayedMonthDate);
 
   const tradeFilter: Parameters<typeof prisma.trade.findMany>[0] = {
     where: {
@@ -94,28 +113,24 @@ export default async function DashboardOverviewPage({
     rMultiple: trade.rMultiple ? Number(trade.rMultiple) : null,
   }));
 
-  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-  const monthEnd = new Date(
-    monthDate.getFullYear(),
-    monthDate.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999,
-  );
+  const monthStartMs = new Date(currentYear, currentMonthIndex, 1).getTime();
+  const monthEndMs = new Date(currentYear, currentMonthIndex + 1, 0, 23, 59, 59, 999).getTime();
 
   const monthTradesDetailed = detailedTrades.filter((trade) => {
     const reference = trade.closedAt ?? trade.openedAt;
-    return reference >= monthStart && reference <= monthEnd;
+    const ms = reference.getTime();
+    return ms >= monthStartMs && ms <= monthEndMs;
   });
 
-  const calendarWeeks = buildMonthCalendar(monthTradesDetailed, monthDate);
+  // removed verbose debug logging
+
+  const calendarWeeks = buildMonthCalendar(monthTradesDetailed, displayedMonthDate);
 
   const recentTrades = trades
     .filter((trade) => {
       const reference = trade.closedAt ?? trade.openedAt;
-      return reference >= monthStart && reference <= monthEnd;
+      const ms = reference.getTime();
+      return ms >= monthStartMs && ms <= monthEndMs;
     })
     .sort((a, b) => {
       const aDate = (a.closedAt ?? a.openedAt).getTime();
@@ -124,41 +139,42 @@ export default async function DashboardOverviewPage({
     })
     .slice(0, 15);
 
-  const { all, last30 } = calculateOverviewMetrics(
-    normalizedTrades.map(({ profitLoss, openedAt, closedAt, rMultiple }) => ({
-      profitLoss,
-      openedAt,
-      closedAt,
-      rMultiple,
-    })),
-  );
+  const monthNormalizedTrades = monthTradesDetailed.map((trade) => ({
+    profitLoss: trade.profitLoss,
+    openedAt: trade.openedAt,
+    closedAt: trade.closedAt,
+    rMultiple: trade.rMultiple ? Number(trade.rMultiple) : null,
+  }));
+
+  const lifetimeMetrics = calculateOverviewMetrics(normalizedTrades);
+  const lifetimeAll = lifetimeMetrics.all;
+
+  const monthMetrics = calculateOverviewMetrics(monthNormalizedTrades);
+  const monthAll = monthMetrics.all;
+  const month30 = monthMetrics.last30;
 
   const kpis = [
     {
-      label: "Net P&L (30d)",
-      value: formatCurrencyMaybe(safeNumber(last30.netPnl)),
-      detail: `Lifetime: ${formatCurrencyMaybe(safeNumber(all.netPnl))}`,
+      label: `Net P&L (${monthLabelShortFormatter.format(displayedMonthDate)})`,
+      value: formatCurrencyMaybe(safeNumber(monthAll.netPnl)),
+      detail: `Last 30 sessions: ${formatCurrencyMaybe(safeNumber(month30.netPnl))}`,
     },
     {
-      label: "Win rate (30d)",
-      value: formatPercent(safeNumber(last30.winRate)),
-      detail: `Lifetime: ${formatPercent(safeNumber(all.winRate))}`,
+      label: "Win rate (month)",
+      value: formatPercent(safeNumber(monthAll.winRate)),
+      detail: `30-day view: ${formatPercent(safeNumber(month30.winRate))}`,
     },
     {
-      label: "Profit factor (30d)",
-      value: formatRatio(safeNumber(last30.profitFactor)),
-      detail: `Lifetime: ${formatRatio(safeNumber(all.profitFactor))}`,
+      label: "Profit factor (month)",
+      value: formatRatio(safeNumber(monthAll.profitFactor)),
+      detail: `30-day view: ${formatRatio(safeNumber(month30.profitFactor))}`,
     },
     {
-      label: "Max drawdown (lifetime)",
-      value: formatCurrencyMaybe(safeNumber(-all.maxDrawdown)),
-      detail: `${all.tradeCount} trades`,
+      label: "Max drawdown (month)",
+      value: formatCurrencyMaybe(safeNumber(-monthAll.maxDrawdown)),
+      detail: `${monthAll.tradeCount} trades`,
     },
   ];
-
-  const { previous, next } = getAdjacentMonths(monthDate);
-
-  const buildMonthParam = (date: Date) => format(date, "yyyy-MM");
 
   const monthTotals = monthTradesDetailed.reduce(
     (acc, trade) => {
@@ -191,7 +207,7 @@ export default async function DashboardOverviewPage({
                 pathname: "/dashboard",
                 query: {
                   ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
-                  month: buildMonthParam(previous),
+                  month: previousMonthParam,
                 },
               }}
               className="rounded-full px-2 py-1 text-xs font-semibold text-foreground/70 transition hover:text-foreground"
@@ -206,7 +222,7 @@ export default async function DashboardOverviewPage({
                 pathname: "/dashboard",
                 query: {
                   ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
-                  month: buildMonthParam(next),
+                  month: nextMonthParam,
                 },
               }}
               className="rounded-full px-2 py-1 text-xs font-semibold text-foreground/70 transition hover:text-foreground"
@@ -238,7 +254,7 @@ export default async function DashboardOverviewPage({
         ))}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[2.2fr_1fr]">
+      <section className="grid gap-4">
         <div className="rounded-2xl border border-foreground/10 bg-background p-6 shadow-sm shadow-foreground/5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-foreground/70">
             <div className="space-y-1">
@@ -279,30 +295,31 @@ export default async function DashboardOverviewPage({
         </div>
 
         <div className="rounded-2xl border border-foreground/10 bg-background p-6 shadow-sm shadow-foreground/5">
-          <h2 className="text-lg font-semibold">Quick stats</h2>
+          <h2 className="text-lg font-semibold">Quick stats (month)</h2>
           <ul className="mt-4 space-y-3 text-sm text-foreground/70">
             <li>
               Total trades:{" "}
-              <span className="font-semibold">{all.tradeCount}</span>
+              <span className="font-semibold">{monthAll.tradeCount}</span>
             </li>
             <li>
               Winning trades:{" "}
-              <span className="font-semibold">{all.winningTrades}</span>
+              <span className="font-semibold">{monthAll.winningTrades}</span>
             </li>
             <li>
               Losing trades:{" "}
-              <span className="font-semibold">{all.losingTrades}</span>
+              <span className="font-semibold">{monthAll.losingTrades}</span>
             </li>
             <li>
-              Lifetime drawdown:{" "}
+              Monthly drawdown:{" "}
               <span className="font-semibold">
-                {formatCurrencyMaybe(safeNumber(-all.maxDrawdown))}
+                {formatCurrencyMaybe(safeNumber(-monthAll.maxDrawdown))}
               </span>
             </li>
           </ul>
           <p className="mt-6 text-xs text-foreground/50">
-            Need more detail? Use the Analytics view to slice by symbol, session, and
-            strategy tags.
+            Lifetime reference: {lifetimeAll.tradeCount} trades, drawdown {formatCurrencyMaybe(
+              safeNumber(-lifetimeAll.maxDrawdown),
+            )}.
           </p>
           <div className="mt-6 space-y-2 text-sm text-foreground/60">
             <p>
@@ -316,42 +333,39 @@ export default async function DashboardOverviewPage({
 
       <section className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         <div className="rounded-2xl border border-foreground/10 bg-background p-6 shadow-sm shadow-foreground/5">
-          <h2 className="text-lg font-semibold">Trade distribution overview</h2>
+          <h2 className="text-lg font-semibold">Monthly distribution</h2>
           <p className="mt-2 text-sm text-foreground/60">
-            {last30.tradeCount > 0 ? (
+            {monthAll.tradeCount > 0 ? (
               <>
-                Last 30 days captured {last30.tradeCount} trades with {last30.winningTrades}{" "}
-                wins and {last30.losingTrades} losses.
+                {monthStartLabel} captured {monthAll.tradeCount} trades with {monthAll.winningTrades} wins and {monthAll.losingTrades} losses.
               </>
             ) : (
-              <>No trades recorded in the last 30 days for this selection.</>
+              <>No trades recorded for this month.</>
             )}
           </p>
           <div className="mt-6 space-y-2 text-sm text-foreground/70">
             <p>
-              Lifetime average trade:{" "}
+              Average trade (month):{" "}
               <span className="font-semibold">
-                {formatCurrencyMaybe(safeNumber(all.averageTrade))}
+                {formatCurrencyMaybe(safeNumber(monthAll.averageTrade))}
               </span>
             </p>
             <p>
-              Largest win / loss:{" "}
+              Largest win / loss (month):{" "}
               <span className="font-semibold">
-                {formatCurrencyMaybe(safeNumber(all.largestWin))} /{" "}
-                {formatCurrencyMaybe(safeNumber(all.largestLoss))}
+                {formatCurrencyMaybe(safeNumber(monthAll.largestWin))} / {formatCurrencyMaybe(safeNumber(monthAll.largestLoss))}
               </span>
             </p>
             <p>
-              Average R multiple:{" "}
+              Average R multiple (month):{" "}
               <span className="font-semibold">
-                {formatRatio(safeNumber(all.averageRMultiple))}
+                {formatRatio(safeNumber(monthAll.averageRMultiple))}
               </span>
             </p>
           </div>
           <div className="mt-8 rounded-xl border border-dashed border-foreground/20 bg-foreground/5 p-4 text-xs text-foreground/60">
-            Equity curve and granular analytics will render here once the charting pipeline
-            is connected. Feed this component with time-series data from{" "}
-            <code className="rounded bg-foreground/10 px-1">/api/analytics/equity</code>.
+            Equity curve and granular analytics will render here once the charting pipeline is connected.
+            Feed this component with time-series data from <code className="rounded bg-foreground/10 px-1">/api/analytics/equity</code>.
           </div>
         </div>
 

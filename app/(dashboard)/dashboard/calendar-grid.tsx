@@ -25,6 +25,7 @@ const safeNumber = (value: number) =>
 
 export function CalendarGrid({ weeks }: CalendarGridProps) {
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
+  const [activeTap, setActiveTap] = useState<string | null>(null);
 
   const totals = useMemo(
     () =>
@@ -61,27 +62,43 @@ export function CalendarGrid({ weeks }: CalendarGridProps) {
                     ? "positive"
                     : "negative";
               const tileClass = cn(
-                "relative rounded-2xl border px-2 py-3 text-center transition bg-background",
+                "relative rounded-2xl border px-2 py-3 text-center transition bg-background text-foreground",
                 day.isCurrentMonth ? "" : "opacity-50",
-                trend === "positive" && "border-emerald-300 text-foreground",
-                trend === "negative" && "border-rose-300 text-foreground",
-                trend === "neutral" && "border-foreground/15 text-foreground/60",
-                day.tradeCount > 0 && "cursor-pointer hover:border-foreground/40",
+                trend === "positive" && "border-emerald-400 hover:border-emerald-500",
+                trend === "negative" && "border-rose-400 hover:border-rose-500",
+                trend === "neutral" && "border-foreground/15 text-foreground/70 hover:border-foreground/30",
+                day.tradeCount > 0 && "cursor-pointer",
               );
+              const pnlClass = cn(
+                "mt-1 text-lg font-semibold",
+                day.netPnl > 0 && "text-emerald-500",
+                day.netPnl < 0 && "text-rose-500",
+                day.netPnl === 0 && "text-foreground/60",
+              );
+              const pnlLabel =
+                day.tradeCount === 0 && day.netPnl === 0
+                  ? "\u00A0"
+                  : formatCurrencyMaybe(safeNumber(day.netPnl));
 
               return (
                 <button
                   key={day.date.toISOString()}
                   type="button"
-                  className={tileClass}
+                  className={cn(
+                    tileClass,
+                    activeTap === day.date.toISOString() && "scale-[0.97] border-foreground",
+                    "transform transition-transform duration-150",
+                  )}
                   onClick={() => {
                     if (day.tradeCount === 0) return;
+                    setActiveTap(day.date.toISOString());
                     setSelectedDay({
                       date: day.date,
                       trades: day.trades,
                       netPnl: day.netPnl,
                       tradeCount: day.tradeCount,
                     });
+                    setTimeout(() => setActiveTap(null), 180);
                   }}
                   aria-label={
                     day.tradeCount === 0
@@ -89,29 +106,29 @@ export function CalendarGrid({ weeks }: CalendarGridProps) {
                       : `${day.tradeCount} trades on ${format(day.date, "PPP")}`
                   }
                 >
-                  <div className="text-sm font-semibold text-foreground">
+                  <span className="absolute top-1 left-2 rounded-full bg-background/80 px-2 py-0.5 text-sm font-semibold text-white/80">
                     {day.isCurrentMonth ? day.label : ""}
-                  </div>
-                  <div className="mt-1 text-sm font-semibold">
-                    {day.tradeCount === 0
-                      ? "—"
-                      : formatCurrencyMaybe(safeNumber(day.netPnl))}
-                  </div>
-                  <span className="absolute bottom-1 left-2 text-[10px] font-semibold text-foreground/50">
-                    {day.winRateLabel}
                   </span>
-                  <span className="absolute bottom-1 right-2 text-[10px] font-semibold text-foreground/50">
-                    {day.tradeCount}T
-                  </span>
+                  <div className={pnlClass}>{pnlLabel}</div>
+                  {day.tradeCount > 0 ? (
+                    <>
+                      <span className="absolute bottom-1 left-2 text-xs font-semibold text-white/60">
+                        {day.winRateLabel}
+                      </span>
+                      <span className="absolute bottom-1 right-2 text-xs font-semibold text-white/60">
+                        {day.tradeCount}T
+                      </span>
+                    </>
+                  ) : null}
                 </button>
               );
             })}
             <div
               className={cn(
-                "rounded-2xl border px-2 py-3 text-center",
-                week.summary.netPnl > 0 && "border-emerald-200 bg-emerald-50 text-emerald-700",
-                week.summary.netPnl < 0 && "border-rose-200 bg-rose-50 text-rose-700",
-                week.summary.netPnl === 0 && "border-foreground/10 bg-foreground/5 text-foreground/60",
+                "rounded-2xl border px-2 py-3 text-center bg-background text-foreground",
+                week.summary.netPnl > 0 && "border-emerald-400",
+                week.summary.netPnl < 0 && "border-rose-400",
+                week.summary.netPnl === 0 && "border-foreground/15",
               )}
             >
               <div className="text-sm font-semibold text-foreground">Σ</div>
