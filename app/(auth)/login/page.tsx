@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -84,6 +85,18 @@ export default function LoginPage() {
           {pending ? "Signing in..." : "Sign in"}
         </button>
       </form>
+
+      <div className="rounded-2xl border border-foreground/10 bg-background/80 p-4 text-sm text-foreground/65">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-emerald-500" />
+          <p className="font-semibold text-foreground">Super admin access</p>
+        </div>
+        <p className="mt-2 text-xs text-foreground/60">
+          Elevated users sign in through this same form. Ensure the account is created with the{" "}
+          <code className="rounded bg-foreground/10 px-1">SUPER_ADMIN</code> role in the database. Once authenticated you
+          will see the dedicated Super Admin portal in the sidebar.
+        </p>
+      </div>
 
       <div className="flex flex-col gap-2 text-center text-xs text-foreground/60">
         <Link href="/reset-password" className="hover:text-foreground">

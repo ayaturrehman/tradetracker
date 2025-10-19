@@ -37,4 +37,10 @@ export const dashboardNav: AppNavItem[] = [
     description: "User management, plan configuration, and sync diagnostics.",
     roles: ["ADMIN", "SUPER_ADMIN"],
   },
+  {
+    title: "Super Admin",
+    href: "/admin/super",
+    description: "Global controls, system status, and credential management.",
+    roles: ["SUPER_ADMIN"],
+  },
 ];
