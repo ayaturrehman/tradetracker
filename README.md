@@ -106,3 +106,4 @@ Front-end components should call the preview endpoint immediately after a user s
 - Wire Stripe Checkout + customer portal.
 - Build the CSV upload UI and connect it to the preview/import endpoints.
 - Implement background workers (BullMQ/Upstash) to process large CSVs and API syncs without blocking requests.
+# tradetracker
