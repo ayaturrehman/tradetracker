@@ -24,3 +24,35 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes float-slow {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(10px, -16px, 0) rotate(2deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+}
+
+@keyframes float-medium {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-14px, 12px, 0) rotate(-3deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 14s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: float-medium 10s ease-in-out infinite;
+}
