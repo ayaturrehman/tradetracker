@@ -61,11 +61,11 @@ export function CalendarGrid({ weeks }: CalendarGridProps) {
                     ? "positive"
                     : "negative";
               const tileClass = cn(
-                "relative rounded-2xl border px-2 py-3 text-center transition",
+                "relative rounded-2xl border px-2 py-3 text-center transition bg-background",
                 day.isCurrentMonth ? "" : "opacity-50",
-                trend === "positive" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-                trend === "negative" && "border-rose-200 bg-rose-50 text-rose-700",
-                trend === "neutral" && "border-foreground/10 bg-foreground/5 text-foreground/60",
+                trend === "positive" && "border-emerald-300 text-foreground",
+                trend === "negative" && "border-rose-300 text-foreground",
+                trend === "neutral" && "border-foreground/15 text-foreground/60",
                 day.tradeCount > 0 && "cursor-pointer hover:border-foreground/40",
               );
 
@@ -98,7 +98,7 @@ export function CalendarGrid({ weeks }: CalendarGridProps) {
                       : formatCurrencyMaybe(safeNumber(day.netPnl))}
                   </div>
                   <span className="absolute bottom-1 left-2 text-[10px] font-semibold text-foreground/50">
-                    {day.tradeCount === 0 ? "0%" : `${day.winRate.toFixed(0)}%`}
+                    {day.winRateLabel}
                   </span>
                   <span className="absolute bottom-1 right-2 text-[10px] font-semibold text-foreground/50">
                     {day.tradeCount}T
